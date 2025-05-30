@@ -98,7 +98,7 @@ if photo is not None:
             idx = label_to_index(label_text)
             st.session_state["features"].append(features)
             st.session_state["labels"].append(idx)
-            st.experimental_rerun()
+            st.rerun()
     else:
         if st.session_state["weights"] is not None:
             X = features[np.newaxis, :]
@@ -122,7 +122,7 @@ if photo is not None:
                 w, b = train_one_vs_rest(X_all, y_all, num_cls)
                 st.session_state["weights"] = w
                 st.session_state["biases"] = b
-                st.experimental_rerun()
+                st.rerun()
         else:
             st.info("Not enough data to train. Label this picture to continue.")
             label_text = st.text_input("Label this picture")
@@ -137,4 +137,4 @@ if photo is not None:
                     w, b = train_one_vs_rest(X_all, y_all, num_cls)
                     st.session_state["weights"] = w
                     st.session_state["biases"] = b
-                st.experimental_rerun()
+                st.rerun()
