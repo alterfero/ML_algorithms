@@ -6,13 +6,15 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pydub import AudioSegment
+import soundfile as sf
+
 
 st.set_page_config(layout="wide")
 
 # ---- PARAMETERS ----
-N_BINS = 16
+N_BINS = 32
 FREQ_MIN = 50
-FREQ_MAX = 5000
+FREQ_MAX = 8000
 SAMPLES_PER_RECORDING = 100
 SAMPLE_RATE = 16000
 
@@ -188,14 +190,53 @@ if st.session_state["model"] is not None:
         pred_label = st.session_state["label_names"][np.argmax(avg_pred)]
         st.write(f"Predicted label: **{pred_label}** (confidence: {100 * np.max(avg_pred):.1f}%)")
 
-# ---- FAQ / TIPS ----
-with st.expander("ℹ️ How this works"):
-    st.write(
-        """
-        - Record or upload two different types of sounds and label them.
-        - Each sound is split into 100 chunks, and a frequency analysis (FFT) is used to extract 16 features per chunk.
-        - A neural network is trained to distinguish between the two sound types.
-        - You can change the number of hidden layers and neurons.
-        - Once trained, record a new sound to see the model guess the label
-        """
-    )
+def generate_feature_vector(model, target_label_idx, steps=100, lr=0.1):
+    # Start from random normalized vector
+    x = np.random.rand(1, N_BINS)
+    x = x / np.sum(x)
+    x = tf.Variable(x, dtype=tf.float32)
+    target = tf.constant([target_label_idx])
+    for _ in range(steps):
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            pred = model(x)
+            loss = -pred[0, target_label_idx]  # maximize probability
+        grad = tape.gradient(loss, x)
+        x.assign_add(-lr * grad)
+        # Re-normalize to sum to 1, and clip to non-negative
+        x.assign(tf.clip_by_value(x, 0, np.inf))
+        x.assign(x / tf.reduce_sum(x))
+    return x.numpy().flatten()
+
+def features_to_audio(features, sr=SAMPLE_RATE, duration=1.0):
+    # Each bin is magnitude for log-spaced bins, 50-5000 Hz
+    n_fft = 2048
+    t = np.zeros(int(sr * duration))
+    bin_edges = np.logspace(np.log10(FREQ_MIN), np.log10(FREQ_MAX), N_BINS + 1)
+    # Assign random phases and synthesize
+    for i in range(N_BINS):
+        f0 = (bin_edges[i] + bin_edges[i+1]) / 2
+        mag = features[i]
+        # Generate sine with random phase
+        phase = np.random.rand() * 2 * np.pi
+        t += mag * np.sin(2 * np.pi * f0 * np.linspace(0, duration, len(t)) + phase)
+    # Normalize
+    t = t / np.max(np.abs(t)) * 0.7
+    return t
+
+# GAN demo
+st.header("7. Generate 'Fake' Sounds via GAN-like Optimization")
+if st.session_state["model"] is not None:
+    synth_label = st.selectbox("Choose label to synthesize:", st.session_state["label_names"])
+    synth_button = st.button("Generate and Play Synthetic Example")
+    if synth_button:
+        label_idx = st.session_state["label_names"].index(synth_label)
+        fake_features = generate_feature_vector(st.session_state["model"], label_idx)
+        st.write("Generated feature vector (normalized energy per bin):", fake_features)
+        fake_audio = features_to_audio(fake_features, duration=10.0)
+        # Write to bytes as WAV
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as fp:
+            sf.write(fp.name, fake_audio, SAMPLE_RATE)
+            fp.seek(0)
+            st.audio(fp.read(), format="audio/wav")
