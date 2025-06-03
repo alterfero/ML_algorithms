@@ -6,7 +6,7 @@ Open a terminal window.
 
 1) Create a virtual environment and activate it
 `python3 -m venv venv`
-`source venv/bin/activate` (Mac) or `venv\Scripts\activate` (Mac/Linux)
+`source venv/bin/activate` (Mac/linux) or `venv\Scripts\activate` (Windows)
 After activation you should see `venv` at the beginning of your terminal command line.
 
 2) install required Python libraries in your virtual environment
